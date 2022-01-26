@@ -147,7 +147,6 @@ class coo_matrix(sparse_data._data_matrix):
         #import cupy.array_api as cpx
         # TODO: copy not supported yet
         from cupy.array_api.array_compatibility import get_namespace
-        import ipdb; ipdb.set_trace()
         cpx, array_api = get_namespace(data, row, col)
         if array_api:
             data = cpx.astype(cpx.asarray(data), dtype)
@@ -186,9 +185,14 @@ class coo_matrix(sparse_data._data_matrix):
         but with different data.  By default the index arrays
         (i.e. .row and .col) are copied.
         """
+        from cupy.array_api.array_compatibility import get_namespace
+        xp, array_api = get_namespace(self.row)
         if copy:
+            if array_api:
+                row_copy = xp.asarray(self.row._array.copy())
+                col_copy = xp.asarray(self.col._array.copy())
             return coo_matrix(
-                (data, (self.row.copy(), self.col.copy())),
+                (data, (row_copy, col_copy)),
                 shape=self.shape, dtype=data.dtype)
         else:
             return coo_matrix(
@@ -406,9 +410,16 @@ class coo_matrix(sparse_data._data_matrix):
         # See https://docs.nvidia.com/cuda/cusparse/index.html#coo-format
         keys = cupy.stack([self.col, self.row])
         order = cupy.lexsort(keys)
-        src_data = self.data[order]
-        src_row = self.row[order]
-        src_col = self.col[order]
+        from cupy.array_api.array_compatibility import get_namespace
+        xp, array_api = get_namespace(self.data)
+        if array_api:
+            src_data = self.data._array[order]
+            src_row = self.row._array[order]
+            src_col = self.col._array[order]
+        else: 
+            src_data = self.data[order]
+            src_row = self.row[order]
+            src_col = self.col[order]
         diff = self._sum_duplicates_diff(src_row, src_col, size=self.row.size)
 
         if diff[1:].all():
