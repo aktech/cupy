@@ -95,10 +95,9 @@ class coo_matrix(sparse_data._data_matrix):
         elif _scipy_available and scipy.sparse.issparse(arg1):
             # Convert scipy.sparse to cupyx.scipy.sparse
             x = arg1.tocoo()
-            import cupy.array_api as cpx
-            data = cpx.asarray(x.data)
-            row = cpx.asarray(x.row, dtype=cpx.int32)
-            col = cpx.asarray(x.col, dtype=cpx.int32)
+            data = cupy.array(x.data._array if hasattr(x.data, '_array') else x.data)
+            row = cupy.array(x.row._array if hasattr(x.row, '_array') else x.row, dtype='i')
+            col = cupy.array(x.col._array if hasattr(x.col, '_array') else x.col, dtype='i')
             copy = False
             if shape is None:
                 shape = arg1.shape
@@ -144,16 +143,9 @@ class coo_matrix(sparse_data._data_matrix):
                 'Only float32, float64, complex64 and complex128'
                 ' are supported')
 
-        from cupy.array_api.array_compatibility import get_namespace
-        cpx, array_api = get_namespace(data, row, col)
-        if array_api:
-            data = cpx.astype(cpx.asarray(data), dtype)
-            row = cpx.astype(cpx.asarray(row), dtype)
-            col = cpx.astype(cpx.asarray(col), dtype)
-        else:
-            data = data.astype(dtype, copy=copy)
-            row = row.astype('i', copy=copy)
-            col = col.astype('i', copy=copy)
+        data = data._array.astype(dtype, copy=copy) if hasattr(data, '_array') else data.astype(dtype, copy=copy)
+        row = row._array.astype('i', copy=copy) if hasattr(row, '_array') else row.astype('i', copy=copy)
+        col = col._array.astype('i', copy=copy) if hasattr(col, '_array') else col.astype('i', copy=copy)
 
         if shape is None:
             if row.shape[0] == 0 or col.shape[0] == 0:
@@ -162,13 +154,13 @@ class coo_matrix(sparse_data._data_matrix):
             shape = (int(row.max()) + 1, int(col.max()) + 1)
 
         if data.shape[0] > 0:
-            if cpx.max(row) >= shape[0]:
+            if row._array.max() if hasattr(row, '_array') else row.max() >= shape[0]:
                 raise ValueError('row index exceeds matrix dimensions')
-            if cpx.max(col) >= shape[1]:
+            if col._array.max() if hasattr(col, '_array') else col.max() >= shape[1]:
                 raise ValueError('column index exceeds matrix dimensions')
-            if cpx.min(row) < 0:
+            if row._array.min() if hasattr(row, '_array') else row.min() < 0:
                 raise ValueError('negative row index found')
-            if cpx.min(col) < 0:
+            if col._array.min() if hasattr(col, '_array') else col.min() < 0:
                 raise ValueError('negative column index found')
 
         sparse_data._data_matrix.__init__(self, data)
@@ -183,19 +175,10 @@ class coo_matrix(sparse_data._data_matrix):
         but with different data.  By default the index arrays
         (i.e. .row and .col) are copied.
         """
-        from cupy.array_api.array_compatibility import get_namespace
-        xp, array_api = get_namespace(self.row)
         if copy:
-            if array_api:
-                row_copy = xp.asarray(self.row._array.copy())
-                col_copy = xp.asarray(self.col._array.copy())
-                return coo_matrix(
-                    (data, (row_copy, col_copy)),
+            return coo_matrix(
+                    (data, (self.row.copy(), self.col.copy())),
                     shape=self.shape, dtype=data.dtype)
-            else:
-                return coo_matrix(
-                        (data, (self.row.copy(), self.col.copy())),
-                        shape=self.shape, dtype=data.dtype)
         else:
             return coo_matrix(
                 (data, (self.row, self.col)), shape=self.shape,
@@ -412,16 +395,10 @@ class coo_matrix(sparse_data._data_matrix):
         # See https://docs.nvidia.com/cuda/cusparse/index.html#coo-format
         keys = cupy.stack([self.col, self.row])
         order = cupy.lexsort(keys)
-        from cupy.array_api.array_compatibility import get_namespace
-        xp, array_api = get_namespace(self.data)
-        if array_api:
-            src_data = self.data._array[order]
-            src_row = self.row._array[order]
-            src_col = self.col._array[order]
-        else: 
-            src_data = self.data[order]
-            src_row = self.row[order]
-            src_col = self.col[order]
+        src_data = self.data._array[order] if hasattr(self.data, '_array') else self.data[order]
+        src_row = self.row._array[order] if hasattr(self.row, '_array') else self.row[order]
+        src_col = self.col._array[order] if hasattr(self.col, '_array') else self.col[order]
+
         diff = self._sum_duplicates_diff(src_row, src_col, size=self.row.size)
 
         if diff[1:].all():
