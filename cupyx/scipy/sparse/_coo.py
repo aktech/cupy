@@ -202,8 +202,8 @@ class coo_matrix(sparse_data._data_matrix):
         diag_mask = (self.row + k) == self.col
 
         if self.has_canonical_format:
-            row = self.row[diag_mask]
-            data = self.data[diag_mask]
+            row = self.row._array[diag_mask] if hasattr(self.row, '_array') else self.row[diag_mask]
+            data = self.data._array[diag_mask] if hasattr(self.data, '_array') else self.data[diag_mask]
         else:
             row, _, data = self._sum_duplicates(self.row[diag_mask],
                                                 self.col[diag_mask],
