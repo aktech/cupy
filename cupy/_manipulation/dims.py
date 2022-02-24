@@ -145,6 +145,7 @@ def expand_dims(a, axis):
     """
     if type(axis) not in (tuple, list):
         axis = axis,
+    a = a._array if hasattr(a, '_array') else a
     return _manipulation._expand_dims(a, axis)
 
 
