@@ -95,9 +95,9 @@ class coo_matrix(sparse_data._data_matrix):
         elif _scipy_available and scipy.sparse.issparse(arg1):
             # Convert scipy.sparse to cupyx.scipy.sparse
             x = arg1.tocoo()
-            data = cupy.array(x.data)
-            row = cupy.array(x.row, dtype='i')
-            col = cupy.array(x.col, dtype='i')
+            data = cupy.array(x.data._array if hasattr(x.data, '_array') else x.data)
+            row = cupy.array(x.row._array if hasattr(x.row, '_array') else x.row, dtype='i')
+            col = cupy.array(x.col._array if hasattr(x.col, '_array') else x.col, dtype='i')
             copy = False
             if shape is None:
                 shape = arg1.shape
@@ -114,7 +114,7 @@ class coo_matrix(sparse_data._data_matrix):
                     _base.isdense(row) and row.ndim == 1 and
                     _base.isdense(col) and col.ndim == 1):
                 raise ValueError('row, column, and data arrays must be 1-D')
-            if not (len(data) == len(row) == len(col)):
+            if not (data.shape[0] == row.shape[0] == col.shape[0]):
                 raise ValueError(
                     'row, column, and data array must all be the same length')
 
@@ -143,24 +143,24 @@ class coo_matrix(sparse_data._data_matrix):
                 'Only float32, float64, complex64 and complex128'
                 ' are supported')
 
-        data = data.astype(dtype, copy=copy)
-        row = row.astype('i', copy=copy)
-        col = col.astype('i', copy=copy)
+        data = data._array.astype(dtype, copy=copy) if hasattr(data, '_array') else data.astype(dtype, copy=copy)
+        row = row._array.astype('i', copy=copy) if hasattr(row, '_array') else row.astype('i', copy=copy)
+        col = col._array.astype('i', copy=copy) if hasattr(col, '_array') else col.astype('i', copy=copy)
 
         if shape is None:
-            if len(row) == 0 or len(col) == 0:
+            if row.shape[0] == 0 or col.shape[0] == 0:
                 raise ValueError(
                     'cannot infer dimensions from zero sized index arrays')
             shape = (int(row.max()) + 1, int(col.max()) + 1)
 
-        if len(data) > 0:
-            if row.max() >= shape[0]:
+        if data.shape[0] > 0:
+            if row._array.max() if hasattr(row, '_array') else row.max() >= shape[0]:
                 raise ValueError('row index exceeds matrix dimensions')
-            if col.max() >= shape[1]:
+            if col._array.max() if hasattr(col, '_array') else col.max() >= shape[1]:
                 raise ValueError('column index exceeds matrix dimensions')
-            if row.min() < 0:
+            if row._array.min() if hasattr(row, '_array') else row.min() < 0:
                 raise ValueError('negative row index found')
-            if col.min() < 0:
+            if col._array.min() if hasattr(col, '_array') else col.min() < 0:
                 raise ValueError('negative column index found')
 
         sparse_data._data_matrix.__init__(self, data)
@@ -176,9 +176,12 @@ class coo_matrix(sparse_data._data_matrix):
         (i.e. .row and .col) are copied.
         """
         if copy:
+            import cupy.array_api as cpx
+            row_copy = self.row._array.copy() if hasattr(self.row, '_array') else self.row.copy()
+            col_copy = self.col._array.copy() if hasattr(self.col, '_array') else self.col.copy()
             return coo_matrix(
-                (data, (self.row.copy(), self.col.copy())),
-                shape=self.shape, dtype=data.dtype)
+                    (data, (cpx.asarray(row_copy), cpx.asarray(col_copy))),
+                    shape=self.shape, dtype=data.dtype)
         else:
             return coo_matrix(
                 (data, (self.row, self.col)), shape=self.shape,
@@ -202,12 +205,17 @@ class coo_matrix(sparse_data._data_matrix):
         diag_mask = (self.row + k) == self.col
 
         if self.has_canonical_format:
-            row = self.row[diag_mask]
-            data = self.data[diag_mask]
+            row = self.row._array[diag_mask] if hasattr(self.row, '_array') else self.row[diag_mask]
+            data = self.data._array[diag_mask] if hasattr(self.data, '_array') else self.data[diag_mask]
         else:
-            row, _, data = self._sum_duplicates(self.row[diag_mask],
-                                                self.col[diag_mask],
-                                                self.data[diag_mask])
+            diag_coo = coo_matrix((
+                self.data[diag_mask], (self.row[diag_mask], self.col[diag_mask])),
+                shape=self.shape
+            )
+            diag_coo.sum_duplicates()
+            row = diag_coo.row
+            data = diag_coo.data
+
         diag[row + min(k, 0)] = data
 
         return diag
@@ -395,9 +403,10 @@ class coo_matrix(sparse_data._data_matrix):
         # See https://docs.nvidia.com/cuda/cusparse/index.html#coo-format
         keys = cupy.stack([self.col, self.row])
         order = cupy.lexsort(keys)
-        src_data = self.data[order]
-        src_row = self.row[order]
-        src_col = self.col[order]
+        src_data = self.data._array[order] if hasattr(self.data, '_array') else self.data[order]
+        src_row = self.row._array[order] if hasattr(self.row, '_array') else self.row[order]
+        src_col = self.col._array[order] if hasattr(self.col, '_array') else self.col[order]
+
         diff = self._sum_duplicates_diff(src_row, src_col, size=self.row.size)
 
         if diff[1:].all():

@@ -60,6 +60,7 @@ def asfortranarray(a, dtype=None):
     .. seealso:: :func:`numpy.asfortranarray`
 
     """
+    a = a._array if hasattr(a, '_array') else a
     return _core.asfortranarray(a, dtype)
 
 

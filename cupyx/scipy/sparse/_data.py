@@ -57,7 +57,13 @@ class _data_matrix(_base.spmatrix):
     conj.__doc__ = _base.spmatrix.conj.__doc__
 
     def copy(self):
-        return self._with_data(self.data.copy(), copy=True)
+        from cupy.array_api.array_compatibility import get_namespace
+        xp, array_api = get_namespace(self.data)
+        if array_api:
+            data_copy = xp.asarray(self.data._array.copy())
+        else:
+            data_copy = self.data.copy()
+        return self._with_data(data_copy, copy=True)
 
     copy.__doc__ = _base.spmatrix.copy.__doc__
 
