@@ -176,8 +176,11 @@ class coo_matrix(sparse_data._data_matrix):
         (i.e. .row and .col) are copied.
         """
         if copy:
+            import cupy.array_api as cpx
+            row_copy = self.row._array.copy() if hasattr(self.row, '_array') else self.row.copy()
+            col_copy = self.col._array.copy() if hasattr(self.col, '_array') else self.col.copy()
             return coo_matrix(
-                    (data, (self.row.copy(), self.col.copy())),
+                    (data, (cpx.asarray(row_copy), cpx.asarray(col_copy))),
                     shape=self.shape, dtype=data.dtype)
         else:
             return coo_matrix(
