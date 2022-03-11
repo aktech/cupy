@@ -1247,13 +1247,7 @@ class BaseDescriptor(object):
         self.destroy = destroyer
 
     def __del__(self, is_shutting_down=_util.is_shutting_down):
-        if is_shutting_down():
-            return
-        if self.destroy is None:
-            self.desc = None
-        elif self.desc is not None:
-            self.destroy(self.desc)
-            self.desc = None
+        pass
 
     def __getattr__(self, name):
         if self.get is not None:
